@@ -4,39 +4,55 @@ import jsPDF from "jspdf";
 import MapView from "./MapView";
 import CountrySearchSelect from "./CountrySearchSelect";
 
+interface Coords {
+  lat: number;
+  lng: number;
+}
+
+interface ValidateResponse {
+  success: boolean;
+  message: string;
+  source?: "MongoDB" | "Google";
+  coords?: Coords;
+  path?: number[][][];
+  interpolated?: Coords; // ← ახალი: ზუსტი წერტილი ნომრით
+}
+
 const AddressValidator: React.FC = () => {
-  const [country, setCountry] = useState("საქართველო");
-  const [city, setCity] = useState("");
-  const [street, setStreet] = useState("");
+  const [country, setCountry] = useState<string>("საქართველო");
+  const [city, setCity] = useState<string>("");
+  const [street, setStreet] = useState<string>("");
+  const [houseNumber, setHouseNumber] = useState<string>(""); // ← ახალი
   const [citySuggestions, setCitySuggestions] = useState<string[]>([]);
   const [streetSuggestions, setStreetSuggestions] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(false);
   const [source, setSource] = useState<"MongoDB" | "Google">("MongoDB");
+  const [coords, setCoords] = useState<Coords | null>(null);
+  const [path, setPath] = useState<number[][][] | null>(null);
+  const [finalCoords, setFinalCoords] = useState<Coords | null>(null); // ← საბოლოო წერტილი
   const mapRef = useRef<HTMLDivElement>(null);
 
-
-  const debounce = (func: (...args: any[]) => void, delay: number) => {
+  const debounce = <T extends (...args: any[]) => any>(func: T, delay: number) => {
     let timeout: number;
-    return (...args: any[]) => {
+    return (...args: Parameters<T>) => {
       clearTimeout(timeout);
       timeout = setTimeout(() => func(...args), delay);
     };
   };
 
+  const isGeorgiaCountry = (c: string): boolean =>
+    c === "საქართველო" || c.toLowerCase() === "georgia";
 
-  const isGeorgia = (c: string) => c === "საქართველო" || c.toLowerCase() === "georgia";
+  const isGeorgianScript = (text: string): boolean =>
+    /^[\u10A0-\u10FF\s.,'-]+$/i.test(text);
 
-
-  const isGeorgianScript = (text: string) => /^[\u10A0-\u10FF\s.,'-]+$/i.test(text);
-
-
-  const isLatinScript = (text: string) => /^[a-zA-Z\s.,'-]+$/i.test(text);
-
+  const isLatinScript = (text: string): boolean =>
+    /^[a-zA-Z\s.,'-]+$/i.test(text);
 
   const validateScript = (field: string, value: string): string | null => {
     if (!value) return null;
-    const georgia = isGeorgia(country);
+    const georgia = isGeorgiaCountry(country);
     if (georgia && !isGeorgianScript(value)) {
       return "გთხოვთ, გამოიყენოთ ქართული შრიფტი (მაგ: თბილისი, კოსტავას ქუჩა)";
     }
@@ -46,72 +62,89 @@ const AddressValidator: React.FC = () => {
     return null;
   };
 
-
   const searchCities = debounce(async (query: string) => {
-    if (query.length < 2 || !isGeorgia(country)) {
+    if (query.length < 2 || !isGeorgiaCountry(country)) {
       setCitySuggestions([]);
       return;
     }
     try {
-      const res = await fetch(`http://localhost:5000/api/cities?q=${encodeURIComponent(query)}&country=საქართველო`);
-      const data = await res.json();
+      const res = await fetch(
+        `http://localhost:5000/api/cities?q=${encodeURIComponent(query)}&country=საქართველო`
+      );
+      const data: string[] = await res.json();
       setCitySuggestions(data);
     } catch {
       setCitySuggestions([]);
     }
   }, 300);
 
-
   const searchStreets = debounce(async (query: string) => {
-    if (!city || query.length < 2 || !isGeorgia(country)) {
+    if (!city || query.length < 2 || !isGeorgiaCountry(country)) {
       setStreetSuggestions([]);
       return;
     }
     try {
-      const res = await fetch(`http://localhost:5000/api/streets?city=${encodeURIComponent(city)}&q=${encodeURIComponent(query)}&country=საქართველო`);
-      const data = await res.json();
+      const res = await fetch(
+        `http://localhost:5000/api/streets?city=${encodeURIComponent(city)}&q=${encodeURIComponent(query)}&country=საქართველო`
+      );
+      const data: string[] = await res.json();
       setStreetSuggestions(data);
     } catch {
       setStreetSuggestions([]);
     }
   }, 300);
 
-  useEffect(() => { searchCities(city); }, [city, country]);
-  useEffect(() => { searchStreets(street); }, [street, city, country]);
+  useEffect(() => {
+    searchCities(city);
+  }, [city, country]);
 
+  useEffect(() => {
+    searchStreets(street);
+  }, [street, city, country]);
 
   const handleValidate = async () => {
     const cityScriptError = validateScript("city", city);
     const streetScriptError = validateScript("street", street);
-
     if (cityScriptError || streetScriptError) {
       setMessage(cityScriptError || streetScriptError);
       return;
     }
-
     if (!city || !street) {
-      setMessage("გთხოვთ, შეავსოთ ყველა ველი");
+      setMessage("გთხოვთ, შეავსოთ ქალაქი და ქუჩა");
       return;
     }
 
     setLoading(true);
     setMessage("მიმდინარეობს...");
+    setCoords(null);
+    setPath(null);
+    setFinalCoords(null);
+
     try {
+      const body: any = { country, city, street };
+      if (houseNumber) body.houseNumber = houseNumber; // ← გადაეცემა, მაგრამ არა ვალიდაციაში
+
       const res = await fetch("http://localhost:5000/api/validate-address", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ country, city, street }),
+        body: JSON.stringify(body),
       });
-      const data = await res.json();
+      const data: ValidateResponse = await res.json();
+
       setMessage(data.message + (data.source ? ` [${data.source}]` : ""));
-      setSource(data.source || "Google");
-    } catch {
+
+      if (data.success) {
+        setCoords(data.coords || null);
+        setSource(data.source || "Google");
+        setPath(data.source === "MongoDB" ? data.path || null : null);
+        setFinalCoords(data.interpolated || data.coords || null);
+      }
+    } catch (err) {
       setMessage("შეცდომა: სერვერთან კავშირი");
     } finally {
       setLoading(false);
     }
   };
-
 
   const exportToPDF = async () => {
     if (!mapRef.current) return;
@@ -121,16 +154,23 @@ const AddressValidator: React.FC = () => {
       const pdf = new jsPDF("p", "mm", "a4");
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
       pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
       pdf.setFontSize(14);
-      pdf.text(`მისამართი: ${city}, ${street}, ${country}`, 10, pdfHeight + 10);
+      pdf.text(`მისამართი: ${city}, ${street}${houseNumber ? ` ${houseNumber}` : ""}, ${country}`, 10, pdfHeight + 10);
       pdf.text(`წყარო: ${source}`, 10, pdfHeight + 18);
-      pdf.save(`${city}_${street}_map.pdf`);
+      if (finalCoords) {
+        pdf.text(
+          `კოორდინატები: lat ${finalCoords.lat.toFixed(6)}, lng ${finalCoords.lng.toFixed(6)}`,
+          10,
+          pdfHeight + 26
+        );
+      }
+      pdf.save(`${city}_${street}${houseNumber || ""}_map.pdf`);
     } catch (err) {
       console.error("PDF Error:", err);
     }
   };
-
 
   return (
     <div className="flex flex-col items-center gap-5 p-6 md:p-10 max-w-4xl mx-auto bg-gray-50 rounded-xl shadow-lg">
@@ -142,17 +182,21 @@ const AddressValidator: React.FC = () => {
           setCountry(val);
           setCity("");
           setStreet("");
+          setHouseNumber("");
           setMessage(null);
           setCitySuggestions([]);
           setStreetSuggestions([]);
+          setCoords(null);
+          setPath(null);
+          setFinalCoords(null);
         }}
       />
 
-
+      {/* City */}
       <div className="w-full relative">
         <input
           type="text"
-          placeholder={isGeorgia(country) ? "ქალაქი (მინ. 2 სიმბოლო)" : "City"}
+          placeholder={isGeorgiaCountry(country) ? "ქალაქი (მინ. 2 სიმბოლო)" : "City"}
           value={city}
           onChange={(e) => setCity(e.target.value)}
           className="w-full p-3 border border-gray-300 rounded-lg text-lg focus:ring-2 focus:ring-blue-500"
@@ -175,11 +219,11 @@ const AddressValidator: React.FC = () => {
         )}
       </div>
 
-
+      {/* Street */}
       <div className="w-full relative">
         <input
           type="text"
-          placeholder={isGeorgia(country) ? "ქუჩა (მინ. 2 სიმბოლო)" : "Street"}
+          placeholder={isGeorgiaCountry(country) ? "ქუჩა (მინ. 2 სიმბოლო)" : "Street"}
           value={street}
           onChange={(e) => setStreet(e.target.value)}
           disabled={!city}
@@ -203,6 +247,16 @@ const AddressValidator: React.FC = () => {
         )}
       </div>
 
+      {/* House Number – არა სავალდებულო */}
+      <div className="w-full">
+        <input
+          type="text"
+          placeholder="ქუჩის ნომერი (არასავალდებულო)"
+          value={houseNumber}
+          onChange={(e) => setHouseNumber(e.target.value.replace(/[^0-9a-zA-Z\/-]/g, ""))}
+          className="w-full p-3 border border-gray-300 rounded-lg text-lg focus:ring-2 focus:ring-blue-500 placeholder:italic"
+        />
+      </div>
 
       <button
         onClick={handleValidate}
@@ -216,11 +270,19 @@ const AddressValidator: React.FC = () => {
         {loading ? "მიმდინარეობს..." : "გადაამოწმე"}
       </button>
 
-
-      {message && message.includes("ვალიდურია") && (
+      {/* Map + PDF */}
+      {message && message.includes("ვალიდურია") && finalCoords && (
         <div className="w-full space-y-4">
           <div ref={mapRef} className="rounded-lg overflow-hidden shadow-md">
-            <MapView country={country} city={city} street={street} source={source} />
+            <MapView
+              country={country}
+              city={city}
+              street={street}
+              houseNumber={houseNumber}
+              source={source}
+              coords={finalCoords}
+              path={path}
+            />
           </div>
           <button
             onClick={exportToPDF}
@@ -230,7 +292,6 @@ const AddressValidator: React.FC = () => {
           </button>
         </div>
       )}
-
 
       {message && (
         <p

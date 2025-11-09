@@ -1,17 +1,12 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { countries } from "../data/countries";
 
-interface CountrySearchSelectProps {
-  value: string;
-  onChange: (value: string) => void;
-}
-
-const CountrySearchSelect: React.FC<CountrySearchSelectProps> = ({ value, onChange }) => {
+const CountrySearchSelect = ({ value, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [highlightedIndex, setHighlightedIndex] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef(null);
+  const dropdownRef = useRef(null);
 
   const filteredCountries = countries.filter((c) => {
     const ka = c.ka?.toLowerCase() || "";
@@ -23,8 +18,8 @@ const CountrySearchSelect: React.FC<CountrySearchSelectProps> = ({ value, onChan
   const displayValue = countries.find((c) => (c.ka || c.en) === value)?.ka || value || "ჩაწერეთ ქვეყანა...";
 
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setIsOpen(false);
       }
     };
@@ -36,9 +31,8 @@ const CountrySearchSelect: React.FC<CountrySearchSelectProps> = ({ value, onChan
     setHighlightedIndex(0);
   }, [search]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e) => {
     if (!isOpen) return;
-
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setHighlightedIndex((prev) => (prev + 1) % filteredCountries.length);
@@ -59,7 +53,7 @@ const CountrySearchSelect: React.FC<CountrySearchSelectProps> = ({ value, onChan
     }
   };
 
-  const handleSelect = (c: typeof countries[0]) => {
+  const handleSelect = (c) => {
     onChange(c.ka || c.en);
     setIsOpen(false);
     setSearch("");
@@ -96,7 +90,6 @@ const CountrySearchSelect: React.FC<CountrySearchSelectProps> = ({ value, onChan
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </div>
-
       {isOpen && (
         <div className="absolute z-40 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-80 overflow-y-auto">
           {filteredCountries.length === 0 ? (
