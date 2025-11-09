@@ -1,0 +1,43 @@
+{
+  "name": "b-mongo",
+  "version": "1.0.0",
+  "description": "საქართველოს + მსოფლიოს მისამართების ვალიდაცია: MongoDB (საქართველო) + Google API (სხვა)",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [
+    "georgia",
+    "gis",
+    "address-validation",
+    "mongodb",
+    "google-geocoding",
+    "autocomplete",
+    "leaflet"
+  ],
+  "author": "Tamuna Vepkhvadze",
+  "license": "MIT",
+  "homepage": "https://github.com/yourusername/b-mongo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/b-mongo.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/b-mongo/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@turf/turf": "^7.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "mongodb": "^7.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.7"
+  }
+}
