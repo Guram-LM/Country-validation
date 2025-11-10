@@ -1,3 +1,4 @@
+// src/components/AddressValidator.tsx
 import React, { useState, useEffect, useRef } from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -15,14 +16,14 @@ interface ValidateResponse {
   source?: "MongoDB" | "Google";
   coords?: Coords;
   path?: number[][][];
-  interpolated?: Coords; // ← ახალი: ზუსტი წერტილი ნომრით
+  interpolated?: Coords;
 }
 
 const AddressValidator: React.FC = () => {
   const [country, setCountry] = useState<string>("საქართველო");
   const [city, setCity] = useState<string>("");
   const [street, setStreet] = useState<string>("");
-  const [houseNumber, setHouseNumber] = useState<string>(""); // ← ახალი
+  const [houseNumber, setHouseNumber] = useState<string>("");
   const [citySuggestions, setCitySuggestions] = useState<string[]>([]);
   const [streetSuggestions, setStreetSuggestions] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
@@ -30,7 +31,7 @@ const AddressValidator: React.FC = () => {
   const [source, setSource] = useState<"MongoDB" | "Google">("MongoDB");
   const [coords, setCoords] = useState<Coords | null>(null);
   const [path, setPath] = useState<number[][][] | null>(null);
-  const [finalCoords, setFinalCoords] = useState<Coords | null>(null); // ← საბოლოო წერტილი
+  const [interpolated, setInterpolated] = useState<Coords | null>(null);
   const mapRef = useRef<HTMLDivElement>(null);
 
   const debounce = <T extends (...args: any[]) => any>(func: T, delay: number) => {
@@ -54,10 +55,10 @@ const AddressValidator: React.FC = () => {
     if (!value) return null;
     const georgia = isGeorgiaCountry(country);
     if (georgia && !isGeorgianScript(value)) {
-      return "გთხოვთ, გამოიყენოთ ქართული შრიფტი (მაგ: თბილისი, კოსტავას ქუჩა)";
+      return "გთხოვთ, გამოიყენოთ ქართული შრიფტი (მაგ: თბილისი)";
     }
     if (!georgia && !isLatinScript(value)) {
-      return "გთხოვთ, გამოიყენოთ ლათინური ასოები (a-z, მაგ: Berlin, Main Street)";
+      return "გთხოვთ, გამოიყენოფ ლათინური ასოები (a-z)";
     }
     return null;
   };
@@ -103,10 +104,10 @@ const AddressValidator: React.FC = () => {
   }, [street, city, country]);
 
   const handleValidate = async () => {
-    const cityScriptError = validateScript("city", city);
-    const streetScriptError = validateScript("street", street);
-    if (cityScriptError || streetScriptError) {
-      setMessage(cityScriptError || streetScriptError);
+    const cityError = validateScript("city", city);
+    const streetError = validateScript("street", street);
+    if (cityError || streetError) {
+      setMessage(cityError || streetError);
       return;
     }
     if (!city || !street) {
@@ -118,11 +119,11 @@ const AddressValidator: React.FC = () => {
     setMessage("მიმდინარეობს...");
     setCoords(null);
     setPath(null);
-    setFinalCoords(null);
+    setInterpolated(null);
 
     try {
       const body: any = { country, city, street };
-      if (houseNumber) body.houseNumber = houseNumber; // ← გადაეცემა, მაგრამ არა ვალიდაციაში
+      if (houseNumber) body.houseNumber = houseNumber;
 
       const res = await fetch("http://localhost:5000/api/validate-address", {
         method: "POST",
@@ -132,14 +133,13 @@ const AddressValidator: React.FC = () => {
       const data: ValidateResponse = await res.json();
 
       setMessage(data.message + (data.source ? ` [${data.source}]` : ""));
-
       if (data.success) {
         setCoords(data.coords || null);
         setSource(data.source || "Google");
         setPath(data.source === "MongoDB" ? data.path || null : null);
-        setFinalCoords(data.interpolated || data.coords || null);
+        setInterpolated(data.interpolated || null);
       }
-    } catch (err) {
+    } catch {
       setMessage("შეცდომა: სერვერთან კავშირი");
     } finally {
       setLoading(false);
@@ -154,17 +154,13 @@ const AddressValidator: React.FC = () => {
       const pdf = new jsPDF("p", "mm", "a4");
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-
       pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
       pdf.setFontSize(14);
       pdf.text(`მისამართი: ${city}, ${street}${houseNumber ? ` ${houseNumber}` : ""}, ${country}`, 10, pdfHeight + 10);
       pdf.text(`წყარო: ${source}`, 10, pdfHeight + 18);
-      if (finalCoords) {
-        pdf.text(
-          `კოორდინატები: lat ${finalCoords.lat.toFixed(6)}, lng ${finalCoords.lng.toFixed(6)}`,
-          10,
-          pdfHeight + 26
-        );
+      if (interpolated || coords) {
+        const c = interpolated || coords!;
+        pdf.text(`კოორდინატები: ${c.lat.toFixed(6)}, ${c.lng.toFixed(6)}`, 10, pdfHeight + 26);
       }
       pdf.save(`${city}_${street}${houseNumber || ""}_map.pdf`);
     } catch (err) {
@@ -172,138 +168,189 @@ const AddressValidator: React.FC = () => {
     }
   };
 
+  const finalCoords = interpolated || coords;
+
   return (
-    <div className="flex flex-col items-center gap-5 p-6 md:p-10 max-w-4xl mx-auto bg-gray-50 rounded-xl shadow-lg">
-      <h2 className="text-3xl font-bold text-blue-700">მისამართის ვალიდაცია</h2>
-
-      <CountrySearchSelect
-        value={country}
-        onChange={(val) => {
-          setCountry(val);
-          setCity("");
-          setStreet("");
-          setHouseNumber("");
-          setMessage(null);
-          setCitySuggestions([]);
-          setStreetSuggestions([]);
-          setCoords(null);
-          setPath(null);
-          setFinalCoords(null);
-        }}
-      />
-
-      {/* City */}
-      <div className="w-full relative">
-        <input
-          type="text"
-          placeholder={isGeorgiaCountry(country) ? "ქალაქი (მინ. 2 სიმბოლო)" : "City"}
-          value={city}
-          onChange={(e) => setCity(e.target.value)}
-          className="w-full p-3 border border-gray-300 rounded-lg text-lg focus:ring-2 focus:ring-blue-500"
-        />
-        {citySuggestions.length > 0 && (
-          <ul className="absolute z-30 w-full bg-white border border-gray-200 rounded-lg mt-1 shadow-xl max-h-60 overflow-y-auto">
-            {citySuggestions.map((s, i) => (
-              <li
-                key={i}
-                className="p-3 hover:bg-blue-50 cursor-pointer text-gray-800 font-medium"
-                onClick={() => {
-                  setCity(s);
-                  setCitySuggestions([]);
-                }}
-              >
-                {s}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {/* Street */}
-      <div className="w-full relative">
-        <input
-          type="text"
-          placeholder={isGeorgiaCountry(country) ? "ქუჩა (მინ. 2 სიმბოლო)" : "Street"}
-          value={street}
-          onChange={(e) => setStreet(e.target.value)}
-          disabled={!city}
-          className="w-full p-3 border border-gray-300 rounded-lg text-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-        />
-        {streetSuggestions.length > 0 && (
-          <ul className="absolute z-30 w-full bg-white border border-gray-200 rounded-lg mt-1 shadow-xl max-h-60 overflow-y-auto">
-            {streetSuggestions.map((s, i) => (
-              <li
-                key={i}
-                className="p-3 hover:bg-blue-50 cursor-pointer text-gray-800 font-medium"
-                onClick={() => {
-                  setStreet(s);
-                  setStreetSuggestions([]);
-                }}
-              >
-                {s}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {/* House Number – არა სავალდებულო */}
-      <div className="w-full">
-        <input
-          type="text"
-          placeholder="ქუჩის ნომერი (არასავალდებულო)"
-          value={houseNumber}
-          onChange={(e) => setHouseNumber(e.target.value.replace(/[^0-9a-zA-Z\/-]/g, ""))}
-          className="w-full p-3 border border-gray-300 rounded-lg text-lg focus:ring-2 focus:ring-blue-500 placeholder:italic"
-        />
-      </div>
-
-      <button
-        onClick={handleValidate}
-        disabled={loading || !city || !street}
-        className={`w-full py-3 rounded-lg font-bold text-white transition-all ${
-          loading || !city || !street
-            ? "bg-gray-400 cursor-not-allowed"
-            : "bg-blue-600 hover:bg-blue-700 active:scale-95"
-        }`}
-      >
-        {loading ? "მიმდინარეობს..." : "გადაამოწმე"}
-      </button>
-
-      {/* Map + PDF */}
-      {message && message.includes("ვალიდურია") && finalCoords && (
-        <div className="w-full space-y-4">
-          <div ref={mapRef} className="rounded-lg overflow-hidden shadow-md">
-            <MapView
-              country={country}
-              city={city}
-              street={street}
-              houseNumber={houseNumber}
-              source={source}
-              coords={finalCoords}
-              path={path}
-            />
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-4 md:p-6 lg:p-8">
+      <div className="max-w-2xl mx-auto">
+        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-6 md:p-8 text-white">
+            <h2 className="text-2xl md:text-3xl font-bold text-center">მისამართის ვალიდატორი</h2>
+            <p className="text-sm md:text-base text-center mt-2 opacity-90">საქართველო + მსოფლიო</p>
           </div>
-          <button
-            onClick={exportToPDF}
-            className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 active:scale-95 transition-all"
-          >
-            PDF-ად გადმოწერა
-          </button>
-        </div>
-      )}
 
-      {message && (
-        <p
-          className={`text-lg font-medium text-center px-6 py-3 rounded-lg w-full ${
-            message.includes("ვალიდურია")
-              ? "text-green-700 bg-green-100 border border-green-300"
-              : "text-red-700 bg-red-100 border border-red-300"
-          }`}
-        >
-          {message}
-        </p>
-      )}
+          {/* Form */}
+          <div className="p-6 md:p-8 space-y-6">
+            <CountrySearchSelect
+              value={country}
+              onChange={(val) => {
+                setCountry(val);
+                setCity("");
+                setStreet("");
+                setHouseNumber("");
+                setMessage(null);
+                setCitySuggestions([]);
+                setStreetSuggestions([]);
+                setCoords(null);
+                setPath(null);
+                setInterpolated(null);
+              }}
+            />
+
+            {/* City Input */}
+            <div className="relative">
+              <input
+                type="text"
+                placeholder={isGeorgiaCountry(country) ? "ქალაქი (მინ. 2 სიმბოლო)" : "City"}
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                className="w-full p-4 pl-12 border border-gray-300 rounded-2xl text-lg focus:ring-4 focus:ring-blue-200 focus:border-blue-500 transition-all duration-200"
+              />
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2m-2 0h-5m-9 0h5m-7 0h2" />
+                </svg>
+              </span>
+              {citySuggestions.length > 0 && (
+                <ul className="absolute z-30 w-full mt-2 bg-white border border-gray-200 rounded-2xl shadow-2xl max-h-60 overflow-y-auto">
+                  {citySuggestions.map((s, i) => (
+                    <li
+                      key={i}
+                      onClick={() => {
+                        setCity(s);
+                        setCitySuggestions([]);
+                      }}
+                      className="p-4 hover:bg-blue-50 cursor-pointer text-gray-800 font-medium transition-colors"
+                    >
+                      {s}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* Street Input */}
+            <div className="relative">
+              <input
+                type="text"
+                placeholder={isGeorgiaCountry(country) ? "ქუჩა" : "Street"}
+                value={street}
+                onChange={(e) => setStreet(e.target.value)}
+                disabled={!city}
+                className="w-full p-4 pl-12 border border-gray-300 rounded-2xl text-lg focus:ring-4 focus:ring-blue-200 focus:border-blue-500 transition-all duration-200 disabled:bg-gray-100 disabled:cursor-not-allowed"
+              />
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0h6" />
+                </svg>
+              </span>
+              {streetSuggestions.length > 0 && (
+                <ul className="absolute z-30 w-full mt-2 bg-white border border-gray-200 rounded-2xl shadow-2xl max-h-60 overflow-y-auto">
+                  {streetSuggestions.map((s, i) => (
+                    <li
+                      key={i}
+                      onClick={() => {
+                        setStreet(s);
+                        setStreetSuggestions([]);
+                      }}
+                      className="p-4 hover:bg-blue-50 cursor-pointer text-gray-800 font-medium transition-colors"
+                    >
+                      {s}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* House Number */}
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="სახლის ნომერი (არასავალდებულო)"
+                value={houseNumber}
+                onChange={(e) => setHouseNumber(e.target.value.replace(/[^0-9a-zA-Z\/-]/g, ""))}
+                className="w-full p-4 pl-12 border border-gray-300 rounded-2xl text-lg focus:ring-4 focus:ring-blue-200 focus:border-blue-500 transition-all duration-200 placeholder:italic"
+              />
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeWidth={2} d="M3 7h2l1 7h8l1-7h2" />
+                  <path strokeLinecap="round" strokeWidth={2} d="M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2" />
+                </svg>
+              </span>
+            </div>
+
+            {/* Validate Button */}
+            <button
+              onClick={handleValidate}
+              disabled={loading || !city || !street}
+              className={`w-full py-4 rounded-2xl font-bold text-white text-lg transition-all transform duration-200 flex items-center justify-center gap-3 ${
+                loading || !city || !street
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:scale-98 shadow-xl"
+              }`}
+            >
+              {loading ? (
+                <>
+                  <svg className="animate-spin h-6 w-6" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" opacity="0.3" />
+                    <path fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                  </svg>
+                  მიმდინარეობს...
+                </>
+              ) : (
+                <>
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  გადაამოწმე
+                </>
+              )}
+            </button>
+
+            {/* Message */}
+            {message && (
+              <div
+                className={`p-5 rounded-2xl text-center font-medium transition-all ${
+                  message.includes("ვალიდურია")
+                    ? "bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 border-2 border-green-300"
+                    : "bg-gradient-to-r from-red-100 to-pink-100 text-red-800 border-2 border-red-300"
+                }`}
+              >
+                {message}
+              </div>
+            )}
+
+            {/* Map + PDF */}
+            {message?.includes("ვალიდურია") && finalCoords && (
+              <div className="space-y-5">
+                <div ref={mapRef} className="h-96 rounded-2xl overflow-hidden shadow-2xl border-4 border-indigo-200">
+                  <MapView
+                    country={country}
+                    city={city}
+                    street={street}
+                    houseNumber={houseNumber}
+                    source={source}
+                    coords={coords!}
+                    path={path}
+                    interpolated={interpolated}
+                  />
+                </div>
+
+                <button
+                  onClick={exportToPDF}
+                  className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white py-4 rounded-2xl font-bold hover:from-green-700 hover:to-emerald-700 active:scale-98 transition-all shadow-xl flex items-center justify-center gap-3"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m-9 9h12a1 1 0 001-1V7a1 1 0 00-1-1H5a1 1 0 00-1 1v12a1 1 0 001 1z" />
+                  </svg>
+                  PDF გადმოწერა
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

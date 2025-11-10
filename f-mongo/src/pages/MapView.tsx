@@ -1,13 +1,12 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+// src/components/MapView.tsx
+import React, { useEffect, useMemo } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L, { LatLngBounds } from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-// Leaflet icon fix
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
@@ -16,35 +15,29 @@ interface MapViewProps {
   country: string;
   city: string;
   street: string;
+  houseNumber?: string;
   source: "MongoDB" | "Google";
-  coords: { lat: number; lng: number } | null;
-  /** MongoDB‑ისთვის – ქუჩის ხაზის კოორდინატები (MultiLineString) */
+  coords: { lat: number; lng: number };
   path?: number[][][];
+  interpolated?: { lat: number; lng: number } | null;
 }
 
 const MapView: React.FC<MapViewProps> = ({
   country,
   city,
   street,
+  houseNumber,
   source,
   coords,
   path,
+  interpolated,
 }) => {
-  const [loading, setLoading] = useState(true);
+  const displayCoords = interpolated || coords;
+  const markerPos: [number, number] = [displayCoords.lat, displayCoords.lng];
 
-  // 1. მარკერის პოზიცია (ყოველთვის ერთი წერტილი)
-  const markerPos = useMemo<[number, number] | null>(() => {
-    if (!coords) return null;
-    return [coords.lat, coords.lng];
-  }, [coords]);
-
-  // 2. რუკის ფიტვა – bounds
   const bounds = useMemo<LatLngBounds | null>(() => {
-    if (!coords) return null;
-
-    // თუ გვაქვს path (MongoDB) → გამოვთვალოთ bounds ხაზისთვის
     if (source === "MongoDB" && path && path.length > 0) {
-      const flat = path.flat(2); // [[lng,lat], ...]
+      const flat = path.flat(2);
       const lats = flat.filter((_, i) => i % 2 === 1);
       const lngs = flat.filter((_, i) => i % 2 === 0);
       return new LatLngBounds(
@@ -52,79 +45,79 @@ const MapView: React.FC<MapViewProps> = ({
         [Math.max(...lats), Math.max(...lngs)]
       );
     }
-
-    // Google – მხოლოდ ერთი წერტილი
-    const pad = 0.005; // ~500მ
+    const pad = 0.001;
     return new LatLngBounds(
-      [coords.lat - pad, coords.lng - pad],
-      [coords.lat + pad, coords.lng + pad]
+      [displayCoords.lat - pad, displayCoords.lng - pad],
+      [displayCoords.lat + pad, displayCoords.lng + pad]
     );
-  }, [coords, source, path]);
-
-  // 3. Loading
-  useEffect(() => {
-    setLoading(!coords);
-  }, [coords]);
-
-  if (loading || !coords) {
-    return (
-      <div className="h-96 flex items-center justify-center bg-gray-100 rounded-lg">
-        მიმდინარეობს რუკის ჩატვირთვა...
-      </div>
-    );
-  }
+  }, [displayCoords, source, path]);
 
   return (
-    <div className="w-full h-96 mt-6 rounded-lg overflow-hidden shadow-lg">
-      <MapContainer
-        center={markerPos!}
-        zoom={13}
-        style={{ height: "100%", width: "100%" }}
+    <MapContainer
+      center={markerPos}
+      zoom={houseNumber ? 19 : 17}
+      style={{ height: "100%", width: "100%" }}
+      className="rounded-2xl"
+    >
+      <TileLayer
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+      />
+
+      <Marker
+        position={markerPos}
+        icon={L.divIcon({
+          className: "custom-marker",
+          html: `<div style="
+            background: #1d4ed8;
+            color: white;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 16px;
+            border: 4px solid white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+          ">${houseNumber || "?"}</div>`,
+          iconSize: [36, 36],
+          iconAnchor: [18, 36],
+        })}
       >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        />
-        {markerPos && (
-          <Marker position={markerPos}>
-            <Popup>
-              <strong>{city}</strong>
-              <br />
-              {street}
-              <br />
-              {country}
-            </Popup>
-          </Marker>
-        )}
-        {/* ავტომატური ზუმი bounds‑ზე */}
-        {bounds && <FitBounds bounds={bounds} />}
-        {/* MongoDB – ხაზის დახატვა */}
-        {source === "MongoDB" && path && <PolylinePath path={path} />}
-      </MapContainer>
-    </div>
+        <Popup>
+          <div className="text-center font-semibold">
+            <div>{city}</div>
+            <div className="text-sm">{street} {houseNumber && `#${houseNumber}`}</div>
+            <div className="text-xs text-gray-600">{country}</div>
+          </div>
+        </Popup>
+      </Marker>
+
+      {source === "MongoDB" && path && <PolylinePath path={path} />}
+      <FitToPoint point={displayCoords} zoom={houseNumber ? 19 : 17} />
+    </MapContainer>
   );
 };
 
-// ---------- Helper Components ----------
-
-/** ავტომატური ზუმი bounds‑ზე */
-const FitBounds: React.FC<{ bounds: LatLngBounds }> = ({ bounds }) => {
+const FitToPoint: React.FC<{ point: { lat: number; lng: number }; zoom: number }> = ({ point, zoom }) => {
   const map = useMap();
   useEffect(() => {
-    map.fitBounds(bounds, { padding: [30, 30], maxZoom: 17 });
-  }, [map, bounds]);
+    map.setView([point.lat, point.lng], zoom, { animate: true, duration: 1 });
+  }, [point, zoom, map]);
   return null;
 };
 
-/** ქუჩის ხაზის (MultiLineString) დახატვა */
 const PolylinePath: React.FC<{ path: number[][][] }> = ({ path }) => {
   const map = useMap();
   useEffect(() => {
     const polylines = path.map((line) =>
       L.polyline(line.map(([lng, lat]) => [lat, lng] as [number, number]), {
         color: "#3b82f6",
-        weight: 4,
-        opacity: 0.8,
+        weight: 5,
+        opacity: 0.9,
       }).addTo(map)
     );
     return () => {
