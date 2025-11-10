@@ -1,12 +1,16 @@
 import { useState, useEffect, useRef } from "react";
 import { countries } from "../data/countries";
 
-const CountrySearchSelect = ({ value, onChange }) => {
+interface CountrySearchSelectType {
+  value: string
+  onChange: (val: string) => void
+}
+const CountrySearchSelect:React.FC<CountrySearchSelectType> = ({ value, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [highlightedIndex, setHighlightedIndex] = useState(0);
-  const inputRef = useRef(null);
-  const dropdownRef = useRef(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
 
   const filteredCountries = countries.filter((c) => {
     const ka = c.ka?.toLowerCase() || "";
@@ -18,8 +22,8 @@ const CountrySearchSelect = ({ value, onChange }) => {
   const displayValue = countries.find((c) => (c.ka || c.en) === value)?.ka || value || "ჩაწერეთ ქვეყანა...";
 
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+    const handleClickOutside = (e:MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as any)) {
         setIsOpen(false);
       }
     };
@@ -31,7 +35,7 @@ const CountrySearchSelect = ({ value, onChange }) => {
     setHighlightedIndex(0);
   }, [search]);
 
-  const handleKeyDown = (e) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!isOpen) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -53,7 +57,7 @@ const CountrySearchSelect = ({ value, onChange }) => {
     }
   };
 
-  const handleSelect = (c) => {
+  const handleSelect = (c: { ka?: string; en: string }) => {
     onChange(c.ka || c.en);
     setIsOpen(false);
     setSearch("");

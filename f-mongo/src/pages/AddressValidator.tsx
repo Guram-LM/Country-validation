@@ -1,4 +1,3 @@
-// src/components/AddressValidator.tsx
 import React, { useState, useEffect, useRef } from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -174,17 +173,16 @@ const AddressValidator: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-4 md:p-6 lg:p-8">
       <div className="max-w-2xl mx-auto">
         <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
-          {/* Header */}
           <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-6 md:p-8 text-white">
             <h2 className="text-2xl md:text-3xl font-bold text-center">მისამართის ვალიდატორი</h2>
             <p className="text-sm md:text-base text-center mt-2 opacity-90">საქართველო + მსოფლიო</p>
           </div>
 
-          {/* Form */}
+
           <div className="p-6 md:p-8 space-y-6">
             <CountrySearchSelect
               value={country}
-              onChange={(val) => {
+              onChange={(val: string) => {
                 setCountry(val);
                 setCity("");
                 setStreet("");
@@ -197,8 +195,6 @@ const AddressValidator: React.FC = () => {
                 setInterpolated(null);
               }}
             />
-
-            {/* City Input */}
             <div className="relative">
               <input
                 type="text"
@@ -230,7 +226,6 @@ const AddressValidator: React.FC = () => {
               )}
             </div>
 
-            {/* Street Input */}
             <div className="relative">
               <input
                 type="text"
@@ -263,7 +258,6 @@ const AddressValidator: React.FC = () => {
               )}
             </div>
 
-            {/* House Number */}
             <div className="relative">
               <input
                 type="text"
@@ -280,7 +274,7 @@ const AddressValidator: React.FC = () => {
               </span>
             </div>
 
-            {/* Validate Button */}
+   
             <button
               onClick={handleValidate}
               disabled={loading || !city || !street}
@@ -308,7 +302,7 @@ const AddressValidator: React.FC = () => {
               )}
             </button>
 
-            {/* Message */}
+
             {message && (
               <div
                 className={`p-5 rounded-2xl text-center font-medium transition-all ${
@@ -321,7 +315,6 @@ const AddressValidator: React.FC = () => {
               </div>
             )}
 
-            {/* Map + PDF */}
             {message?.includes("ვალიდურია") && finalCoords && (
               <div className="space-y-5">
                 <div ref={mapRef} className="h-96 rounded-2xl overflow-hidden shadow-2xl border-4 border-indigo-200">

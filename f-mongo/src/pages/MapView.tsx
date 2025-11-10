@@ -1,4 +1,3 @@
-// src/components/MapView.tsx
 import React, { useEffect, useMemo } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L, { LatLngBounds } from "leaflet";
@@ -18,7 +17,7 @@ interface MapViewProps {
   houseNumber?: string;
   source: "MongoDB" | "Google";
   coords: { lat: number; lng: number };
-  path?: number[][][];
+  path?: number[][][] | null;
   interpolated?: { lat: number; lng: number } | null;
 }
 

@@ -85,7 +85,7 @@ app.get("/api/streets", async (req, res) => {
   }
 });
 
-// POST /api/validate-address
+
 app.post("/api/validate-address", async (req, res) => {
   const { country, city, street, houseNumber } = req.body;
 
@@ -121,7 +121,6 @@ app.post("/api/validate-address", async (req, res) => {
         });
       }
 
-      // === ინტერპოლაცია houseNumber-ით ===
       let finalCoords = null;
       let path = road.path.coordinates;
 
@@ -135,7 +134,7 @@ app.post("/api/validate-address", async (req, res) => {
         }
       }
 
-      // თუ ინტერპოლაცია არ მოხდა → ცენტროიდი
+
       if (!finalCoords) {
         const points = [];
         path.forEach((line) => line.forEach((pt) => points.push(pt)));
@@ -157,7 +156,7 @@ app.post("/api/validate-address", async (req, res) => {
       return res.status(500).json({ success: false, message: "MongoDB შეცდომა" });
     }
   } else {
-    // Google API (უცვლელი)
+
     const fullAddress = `${street} ${houseNumber || ""}, ${city}, ${country}`.trim();
     const encoded = encodeURIComponent(fullAddress);
     const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encoded}&key=${GOOGLE_API_KEY}&language=ka`;
@@ -185,12 +184,12 @@ app.post("/api/validate-address", async (req, res) => {
   }
 });
 
-// === ინტერპოლაციის ფუნქცია ===
+
 function interpolateHouseNumber(path, houseNumber) {
   let totalLength = 0;
   const segments = [];
 
-  // გამოვთვალოთ სეგმენტების სიგრძე
+ 
   for (const line of path) {
     for (let i = 0; i < line.length - 1; i++) {
       const p1 = line[i];
@@ -203,8 +202,8 @@ function interpolateHouseNumber(path, houseNumber) {
 
   if (totalLength === 0) return null;
 
-  // ვივარაუდოთ, რომ ნომრები თანაბრად ნაწილდება
-  const targetDistance = (houseNumber / 1000) * totalLength; // მაგ: 1-1000
+
+  const targetDistance = (houseNumber / 1000) * totalLength;
 
   let accumulated = 0;
   for (const seg of segments) {
@@ -217,15 +216,15 @@ function interpolateHouseNumber(path, houseNumber) {
     accumulated += seg.dist;
   }
 
-  // ბოლო წერტილი
+
   const last = path[path.length - 1];
   return { lat: last[last.length - 1][1], lng: last[last.length - 1][0] };
 }
 
-// Haversine ფორმულა
+
 function haversine(lat1, lon1, lat2, lon2) {
   const toRad = (x) => (x * Math.PI) / 180;
-  const R = 6371000; // მეტრებში
+  const R = 6371000; 
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
   const a =
@@ -236,5 +235,4 @@ function haversine(lat1, lon1, lat2, lon2) {
 
 app.listen(PORT, () => {
   console.log(`Server: http://localhost:${PORT}`);
-  console.log(`MongoDB (საქართველო) + Google (სხვა)`);
 });
